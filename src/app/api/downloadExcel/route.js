@@ -64,7 +64,7 @@ export async function GET() {
 
     await browser.close();
 
-    return NextResponse.json({ success: true, fileUrl: "/salas.xlsx" });
+    return NextResponse.json({ success: true, fileUrl: "/eventos.xlsx" });
   } catch (error) {
     console.error("Error al descargar el Excel:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
