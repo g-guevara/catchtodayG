@@ -1,18 +1,21 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
+import chromium from "chrome-aws-lambda";
 import fs from "fs";
 import path from "path";
 
 export async function GET() {
   try {
-    console.log("🔍 Iniciando Puppeteer...");
+    console.log("🔍 Iniciando Puppeteer con chrome-aws-lambda...");
 
+    const executablePath = await chromium.executablePath; // ✅ Obtiene la ruta de Chromium en Vercel
     const browser = await puppeteer.launch({
-      headless: "new",
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath(),
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: executablePath || "/usr/bin/chromium",
+      headless: chromium.headless,
     });
 
     console.log("✅ Puppeteer iniciado correctamente");
