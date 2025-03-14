@@ -7,6 +7,7 @@ export default function DownloadAndReadExcel() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("idle"); // idle, loading, success, error
+  const [logMessages, setLogMessages] = useState([]); // 📜 Mensajes del backend en frontend
 
   const getButtonColor = () => {
     switch (status) {
@@ -23,24 +24,31 @@ export default function DownloadAndReadExcel() {
     }
   };
 
+  const addLog = (message) => {
+    setLogMessages((prevLogs) => [...prevLogs, message]);
+  };
+
   const downloadExcel = async () => {
     try {
       setLoading(true);
       setStatus("loading");
+      setLogMessages(["🔍 Iniciando descarga..."]);
 
       const response = await fetch("/api/downloadExcel");
       const result = await response.json();
 
       if (!result.success) {
         setStatus("error");
+        addLog("❌ Error al descargar el archivo.");
         alert("Error al descargar el archivo");
         return;
       }
 
-      // Leer el archivo Excel descargado
+      addLog("✅ Archivo descargado exitosamente. Leyendo contenido...");
       readExcel(result.fileUrl);
     } catch (error) {
       setStatus("error");
+      addLog("❌ No se pudo descargar el archivo.");
       console.error("Error:", error);
       alert("No se pudo descargar el archivo");
     } finally {
@@ -50,12 +58,14 @@ export default function DownloadAndReadExcel() {
 
   const readExcel = async (fileUrl) => {
     try {
+      addLog(`📂 Cargando archivo desde: ${fileUrl}`);
+
       const response = await fetch(window.location.origin + fileUrl);
       if (!response.ok) throw new Error(`Error al obtener el archivo: ${response.statusText}`);
 
       const arrayBuffer = await response.arrayBuffer();
 
-      // ✅ Convierte el buffer en un Uint8Array antes de leerlo
+      addLog("📄 Procesando datos del archivo...");
       const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: "array" });
 
       if (!workbook.SheetNames.length) throw new Error("No se encontraron hojas en el Excel");
@@ -66,10 +76,12 @@ export default function DownloadAndReadExcel() {
 
       setData(jsonData);
       setStatus("success");
+      addLog("✅ Datos cargados exitosamente.");
       console.log("📊 Datos leídos del Excel:", jsonData);
     } catch (error) {
       setStatus("error");
-      console.error("❌ Error al leer el archivo:", error);
+      addLog("❌ Error al leer el archivo.");
+      console.error("Error al leer el archivo:", error);
     }
   };
 
@@ -92,6 +104,30 @@ export default function DownloadAndReadExcel() {
         {loading ? "Descargando..." : "Descargar y leer Excel"}
       </button>
 
+      {/* 🔹 Mostrar logs del proceso */}
+      <div
+        style={{
+          marginTop: "20px",
+          padding: "10px",
+          backgroundColor: "#f8f9fa",
+          border: "1px solid #ddd",
+          borderRadius: "5px",
+          textAlign: "left",
+          width: "60%",
+          margin: "20px auto",
+        }}
+      >
+        <h3 style={{ fontSize: "16px", marginBottom: "10px" }}>Estado del Proceso:</h3>
+        <ul style={{ listStyle: "none", padding: 0 }}>
+          {logMessages.map((msg, index) => (
+            <li key={index} style={{ fontSize: "14px", marginBottom: "5px" }}>
+              {msg}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* 🔹 Mostrar los datos extraídos del Excel */}
       {data.length > 0 && (
         <table border="1" style={{ margin: "20px auto", borderCollapse: "collapse" }}>
           <thead>
