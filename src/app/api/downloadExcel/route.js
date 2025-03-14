@@ -76,7 +76,7 @@ export async function GET() {
     await browser.close();
 
     // 🔹 Devolver la ruta del archivo descargado para que el frontend lo pueda acceder
-    return NextResponse.json({ success: true, fileUrl: `/public/${path.basename(filePath)}` });
+    return NextResponse.json({ success: true, fileUrl: `/${path.basename(filePath)}` });
   } catch (error) {
     console.error("Error al descargar el Excel:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

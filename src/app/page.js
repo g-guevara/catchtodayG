@@ -50,10 +50,16 @@ export default function DownloadAndReadExcel() {
 
   const readExcel = async (fileUrl) => {
     try {
-      const response = await fetch(fileUrl);
+      const response = await fetch(window.location.origin + fileUrl);
+      if (!response.ok) throw new Error(`Error al obtener el archivo: ${response.statusText}`);
+
       const arrayBuffer = await response.arrayBuffer();
 
-      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+      // ✅ Convierte el buffer en un Uint8Array antes de leerlo
+      const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: "array" });
+
+      if (!workbook.SheetNames.length) throw new Error("No se encontraron hojas en el Excel");
+
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(sheet);
@@ -63,7 +69,7 @@ export default function DownloadAndReadExcel() {
       console.log("📊 Datos leídos del Excel:", jsonData);
     } catch (error) {
       setStatus("error");
-      console.error("Error al leer el archivo:", error);
+      console.error("❌ Error al leer el archivo:", error);
     }
   };
 
