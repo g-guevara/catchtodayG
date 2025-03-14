@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import puppeteer from "puppeteer-core";
+import puppeteer from "puppeteer";
 import fs from "fs";
 import path from "path";
 
@@ -12,27 +12,24 @@ export async function GET() {
     const browser = await puppeteer.launch({
       headless: "new",
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || (await import("puppeteer")).default.executablePath(),
     });
 
     console.log("✅ Puppeteer iniciado correctamente");
 
     const page = await browser.newPage();
-
-    // 🔹 Configurar la carpeta de descargas en `/tmp/` para Vercel
-    const downloadPath = "/tmp"; // 📂 Vercel solo permite escribir en `/tmp/`
+    const downloadPath = "/tmp"; // 📂 Solo /tmp es permitido en Vercel
     console.log(`📂 Configurando carpeta de descargas en: ${downloadPath}`);
 
     const client = await page.target().createCDPSession();
     await client.send("Page.setDownloadBehavior", {
       behavior: "allow",
-      downloadPath: downloadPath, // 📂 Guardar en `/tmp/`
+      downloadPath: downloadPath,
     });
 
     await page.goto("https://hoy.uai.cl/", { waitUntil: "networkidle2" });
     await new Promise(resolve => setTimeout(resolve, 5000));
 
-    // 🔹 Buscar el botón y hacer clic en él
+    // 🔹 Intentar hacer clic en el botón de descarga
     const buttonClicked = await page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll("button"));
       const downloadButton = buttons.find((btn) => btn.textContent.includes("Descargar Excel"));
@@ -44,16 +41,17 @@ export async function GET() {
     });
 
     if (!buttonClicked) {
+      console.error("❌ No se encontró el botón de descarga.");
       await browser.close();
       return NextResponse.json({ success: false, error: "No se encontró el botón de descarga" }, { status: 500 });
     }
 
     console.log("⌛ Esperando que el archivo se descargue...");
 
-    // 🔹 Esperar hasta que el archivo aparezca en `/tmp/`
+    // 🔹 Verificar si el archivo fue descargado
     let filePath = "";
     let attempts = 0;
-    while (attempts < 10) { // Intentamos por 10 segundos
+    while (attempts < 10) {
       const files = fs.readdirSync(downloadPath);
       const excelFile = files.find(file => file.endsWith(".xlsx"));
 
@@ -75,7 +73,7 @@ export async function GET() {
 
     await browser.close();
 
-    // 📌 Devolver el archivo como respuesta en lugar de una URL
+    // 📌 Devolver el archivo como respuesta
     const fileBuffer = fs.readFileSync(filePath);
     return new Response(fileBuffer, {
       headers: {
