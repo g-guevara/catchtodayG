@@ -19,14 +19,14 @@ export async function GET() {
 
     const page = await browser.newPage();
 
-    // 🔹 Configurar Puppeteer para manejar descargas de archivos blob
-    const downloadPath = path.join(process.cwd(), "public");
+    // 🔹 Configurar la carpeta de descargas en `/tmp/` para Vercel
+    const downloadPath = "/tmp"; // 📂 Vercel solo permite escribir en `/tmp/`
     console.log(`📂 Configurando carpeta de descargas en: ${downloadPath}`);
 
     const client = await page.target().createCDPSession();
     await client.send("Page.setDownloadBehavior", {
       behavior: "allow",
-      downloadPath: downloadPath, // 📂 Guardar el archivo en `public/`
+      downloadPath: downloadPath, // 📂 Guardar en `/tmp/`
     });
 
     await page.goto("https://hoy.uai.cl/", { waitUntil: "networkidle2" });
@@ -50,7 +50,7 @@ export async function GET() {
 
     console.log("⌛ Esperando que el archivo se descargue...");
 
-    // 🔹 Esperar hasta que el archivo aparezca en la carpeta de descargas
+    // 🔹 Esperar hasta que el archivo aparezca en `/tmp/`
     let filePath = "";
     let attempts = 0;
     while (attempts < 10) { // Intentamos por 10 segundos
@@ -75,8 +75,15 @@ export async function GET() {
 
     await browser.close();
 
-    // 🔹 Devolver la ruta del archivo descargado para que el frontend lo pueda acceder
-    return NextResponse.json({ success: true, fileUrl: `/${path.basename(filePath)}` });
+    // 📌 Devolver el archivo como respuesta en lugar de una URL
+    const fileBuffer = fs.readFileSync(filePath);
+    return new Response(fileBuffer, {
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="eventos.xlsx"`,
+      },
+    });
+
   } catch (error) {
     console.error("Error al descargar el Excel:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
