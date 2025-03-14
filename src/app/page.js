@@ -27,17 +27,17 @@ export default function DownloadAndReadExcel() {
     try {
       setLoading(true);
       setStatus("loading");
-
+  
       const response = await fetch("/api/downloadExcel");
       const result = await response.json();
-
-      if (!result.success) {
+  
+      if (!result.success || !result.fileUrl) {
         setStatus("error");
         alert("Error al descargar el archivo");
         return;
       }
-
-      // Leer el archivo Excel descargado
+  
+      // 🔹 Ahora descargamos el archivo directamente desde la URL que devuelve el backend
       readExcel(result.fileUrl);
     } catch (error) {
       setStatus("error");
@@ -47,6 +47,7 @@ export default function DownloadAndReadExcel() {
       setLoading(false);
     }
   };
+  
 
   const readExcel = async (fileUrl) => {
     try {
