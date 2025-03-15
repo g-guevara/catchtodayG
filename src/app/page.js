@@ -1,13 +1,12 @@
 "use client"; // Necesario en App Router
 
 import { useState } from "react";
-import * as XLSX from "xlsx";
 
 export default function DownloadAndReadExcel() {
-  const [data, setData] = useState([]);
+  const [data, setData] = useState([]); // 📊 Datos obtenidos del API
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("idle"); // idle, loading, success, error
-  const [logMessages, setLogMessages] = useState([]); // 📜 Mensajes del backend en frontend
+  const [logMessages, setLogMessages] = useState([]); // 📜 Logs del proceso
 
   const getButtonColor = () => {
     switch (status) {
@@ -28,67 +27,50 @@ export default function DownloadAndReadExcel() {
     setLogMessages((prevLogs) => [...prevLogs, message]);
   };
 
-  const downloadExcel = async () => {
-    try {
-      setLoading(true);
-      setStatus("loading");
-      setLogMessages(["🔍 Iniciando descarga..."]);
 
-      const response = await fetch("/api/downloadExcel");
-      const result = await response.json();
+// Ajusta fetchData en tu componente Downlo
+// Componente React actualizado
+const fetchData = async () => {
+  try {
+    setLoading(true);
+    setStatus("loading");
+    setLogMessages(["🔍 Iniciando obtención de datos..."]);
+    
+    addLog("⏳ Esto puede tomar un momento, se están recopilando datos de 53 páginas...");
 
-      if (!result.success) {
-        setStatus("error");
-        addLog("❌ Error al descargar el archivo.");
-        alert("Error al descargar el archivo");
-        return;
-      }
-
-      addLog("✅ Archivo descargado exitosamente. Leyendo contenido...");
-      readExcel(result.fileUrl);
-    } catch (error) {
-      setStatus("error");
-      addLog("❌ No se pudo descargar el archivo.");
-      console.error("Error:", error);
-      alert("No se pudo descargar el archivo");
-    } finally {
-      setLoading(false);
+    const response = await fetch("/api/downloadExcel");
+    
+    if (!response.ok) {
+      throw new Error(`Error HTTP: ${response.status}`);
     }
-  };
+    
+    const result = await response.json();
 
-  const readExcel = async (fileUrl) => {
-    try {
-      addLog(`📂 Cargando archivo desde: ${fileUrl}`);
-
-      const response = await fetch(window.location.origin + fileUrl);
-      if (!response.ok) throw new Error(`Error al obtener el archivo: ${response.statusText}`);
-
-      const arrayBuffer = await response.arrayBuffer();
-
-      addLog("📄 Procesando datos del archivo...");
-      const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: "array" });
-
-      if (!workbook.SheetNames.length) throw new Error("No se encontraron hojas en el Excel");
-
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(sheet);
-
-      setData(jsonData);
-      setStatus("success");
-      addLog("✅ Datos cargados exitosamente.");
-      console.log("📊 Datos leídos del Excel:", jsonData);
-    } catch (error) {
+    if (!result.success) {
       setStatus("error");
-      addLog("❌ Error al leer el archivo.");
-      console.error("Error al leer el archivo:", error);
+      addLog(`❌ Error: ${result.message || "Error al obtener los datos"}`);
+      alert("Error al obtener los datos.");
+      return;
     }
-  };
+
+    addLog(`✅ Datos obtenidos exitosamente. ${result.totalEventos} eventos encontrados.`);
+    setData(result.eventos);
+    setStatus("success");
+  } catch (error) {
+    setStatus("error");
+    addLog(`❌ Error: ${error.message}`);
+    console.error("Error:", error);
+    alert("No se pudieron obtener los datos: " + error.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <div style={{ textAlign: "center", marginTop: "20px" }}>
       <button
-        onClick={downloadExcel}
+        onClick={fetchData}
         disabled={loading}
         style={{
           backgroundColor: getButtonColor(),
@@ -101,7 +83,7 @@ export default function DownloadAndReadExcel() {
           transition: "background-color 0.3s",
         }}
       >
-        {loading ? "Descargando..." : "Descargar y leer Excel"}
+        {loading ? "Cargando..." : "Obtener datos"}
       </button>
 
       {/* 🔹 Mostrar logs del proceso */}
@@ -127,22 +109,28 @@ export default function DownloadAndReadExcel() {
         </ul>
       </div>
 
-      {/* 🔹 Mostrar los datos extraídos del Excel */}
+      {/* 🔹 Mostrar los datos obtenidos */}
       {data.length > 0 && (
-        <table border="1" style={{ margin: "20px auto", borderCollapse: "collapse" }}>
+        <table border="1" style={{ margin: "20px auto", borderCollapse: "collapse", width: "80%" }}>
           <thead>
             <tr>
-              {Object.keys(data[0]).map((key) => (
-                <th key={key} style={{ padding: "10px", backgroundColor: "#f2f2f2" }}>{key}</th>
-              ))}
+              <th style={{ padding: "10px", backgroundColor: "#f2f2f2" }}>Tipo</th>
+              <th style={{ padding: "10px", backgroundColor: "#f2f2f2" }}>Evento</th>
+              <th style={{ padding: "10px", backgroundColor: "#f2f2f2" }}>Sala</th>
+              <th style={{ padding: "10px", backgroundColor: "#f2f2f2" }}>Inicio</th>
+              <th style={{ padding: "10px", backgroundColor: "#f2f2f2" }}>Fin</th>
+              <th style={{ padding: "10px", backgroundColor: "#f2f2f2" }}>Campus</th>
             </tr>
           </thead>
           <tbody>
-            {data.map((row, index) => (
+            {data.map((evento, index) => (
               <tr key={index}>
-                {Object.values(row).map((cell, i) => (
-                  <td key={i} style={{ padding: "10px", border: "1px solid #ddd" }}>{cell}</td>
-                ))}
+                <td style={{ padding: "10px", border: "1px solid #ddd" }}>{evento.tipo}</td>
+                <td style={{ padding: "10px", border: "1px solid #ddd" }}>{evento.evento}</td>
+                <td style={{ padding: "10px", border: "1px solid #ddd" }}>{evento.sala}</td>
+                <td style={{ padding: "10px", border: "1px solid #ddd" }}>{evento.inicio}</td>
+                <td style={{ padding: "10px", border: "1px solid #ddd" }}>{evento.fin}</td>
+                <td style={{ padding: "10px", border: "1px solid #ddd" }}>{evento.campus}</td>
               </tr>
             ))}
           </tbody>

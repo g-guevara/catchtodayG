@@ -1,93 +1,124 @@
-export const runtime = "nodejs";
+// /app/api/downloadExcel/route.js
+import { NextResponse } from 'next/server';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
+import * as XLSX from 'xlsx';
 
-import { NextResponse } from "next/server";
-import puppeteer from "puppeteer-core";
-import chromium from "chrome-aws-lambda";
-import fs from "fs";
-import path from "path";
-
-export async function GET() {
+export async function GET(request) {
   try {
-    console.log("🔍 Iniciando Puppeteer con chrome-aws-lambda...");
-
-    const executablePath = await chromium.executablePath; // ✅ Obtiene la ruta de Chromium en Vercel
-    const browser = await puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: executablePath || "/usr/bin/chromium",
-      headless: chromium.headless,
-    });
-
-    console.log("✅ Puppeteer iniciado correctamente");
-
-    const page = await browser.newPage();
-    const downloadPath = "/tmp"; // 📂 Solo /tmp es permitido en Vercel
-    console.log(`📂 Configurando carpeta de descargas en: ${downloadPath}`);
-
-    const client = await page.target().createCDPSession();
-    await client.send("Page.setDownloadBehavior", {
-      behavior: "allow",
-      downloadPath: downloadPath,
-    });
-
-    await page.goto("https://hoy.uai.cl/", { waitUntil: "networkidle2" });
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    // 🔹 Intentar hacer clic en el botón de descarga
-    const buttonClicked = await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll("button"));
-      const downloadButton = buttons.find((btn) => btn.textContent.includes("Descargar Excel"));
-      if (downloadButton) {
-        downloadButton.click();
-        return true;
+    // Obtener la primera página para analizar la paginación
+    const { data: firstPageData } = await axios.get('https://hoy.uai.cl');
+    const $firstPage = cheerio.load(firstPageData);
+    
+    // Buscar el número total de páginas
+    let totalPages = 1;
+    const paginationItems = $firstPage('nav[aria-label="pagination"] ul li a');
+    paginationItems.each((i, el) => {
+      const pageNum = parseInt($firstPage(el).text().trim());
+      if (!isNaN(pageNum) && pageNum > totalPages) {
+        totalPages = pageNum;
       }
-      return false;
     });
+    console.log(`Detectadas ${totalPages} páginas en total`);
 
-    if (!buttonClicked) {
-      console.error("❌ No se encontró el botón de descarga.");
-      await browser.close();
-      return NextResponse.json({ success: false, error: "No se encontró el botón de descarga" }, { status: 500 });
-    }
-
-    console.log("⌛ Esperando que el archivo se descargue...");
-
-    // 🔹 Verificar si el archivo fue descargado
-    let filePath = "";
-    let attempts = 0;
-    while (attempts < 10) {
-      const files = fs.readdirSync(downloadPath);
-      const excelFile = files.find(file => file.endsWith(".xlsx"));
-
-      if (excelFile) {
-        filePath = path.join(downloadPath, excelFile);
-        console.log("📂 Archivo descargado:", filePath);
-        break;
+    // Inicializar el array que contendrá todos los eventos
+    let allEvents = [];
+    
+    // Procesar los eventos de la primera página (ya tenemos los datos)
+    $firstPage('table tbody tr').each((i, element) => {
+      const columns = $firstPage(element).find('td');
+      
+      if (columns.length >= 6) {
+        allEvents.push({
+          tipo: $firstPage(columns[0]).find('div').text().trim() || 'Sin tipo',
+          evento: $firstPage(columns[1]).text().trim(),
+          sala: $firstPage(columns[2]).text().trim(),
+          inicio: $firstPage(columns[3]).text().trim(),
+          fin: $firstPage(columns[4]).text().trim(),
+          campus: $firstPage(columns[5]).text().trim()
+        });
       }
-
-      attempts++;
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Espera 1s antes de volver a verificar
-    }
-
-    if (!filePath) {
-      console.error("❌ No se encontró el archivo Excel después de descargarlo.");
-      await browser.close();
-      return NextResponse.json({ success: false, error: "No se encontró el archivo Excel en la carpeta de descargas" }, { status: 500 });
-    }
-
-    await browser.close();
-
-    // 📌 Devolver el archivo como respuesta
-    const fileBuffer = fs.readFileSync(filePath);
-    return new Response(fileBuffer, {
-      headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="eventos.xlsx"`,
-      },
     });
+    
+    console.log(`Procesada página 1 de ${totalPages}. Eventos hasta ahora: ${allEvents.length}`);
 
+    // Extraer eventos de las páginas restantes (empezando desde la página 2)
+    for (let page = 2; page <= totalPages; page++) {
+      console.log(`Procesando página ${page} de ${totalPages}...`);
+      
+      // Hacer la solicitud a la página actual
+      const { data } = await axios.get(`https://hoy.uai.cl/?page=${page}`);
+      const $ = cheerio.load(data);
+      
+      // Extraer los datos de la tabla en esta página
+      $('table tbody tr').each((i, element) => {
+        const columns = $(element).find('td');
+        
+        if (columns.length >= 6) {
+          allEvents.push({
+            tipo: $(columns[0]).find('div').text().trim() || 'Sin tipo',
+            evento: $(columns[1]).text().trim(),
+            sala: $(columns[2]).text().trim(),
+            inicio: $(columns[3]).text().trim(),
+            fin: $(columns[4]).text().trim(),
+            campus: $(columns[5]).text().trim()
+          });
+        }
+      });
+      
+      console.log(`Procesada página ${page} de ${totalPages}. Eventos hasta ahora: ${allEvents.length}`);
+      
+      // Pequeña pausa para no sobrecargar el servidor
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    
+    console.log(`✅ Extracción completa. Obtenidos ${allEvents.length} eventos en total.`);
+
+    // Obtener el formato de la URL
+    const { searchParams } = new URL(request.url);
+    const format = searchParams.get('format');
+    
+    // Preparar el Excel para descargas o responder con JSON
+    if (format === 'excel') {
+      const worksheet = XLSX.utils.json_to_sheet(allEvents);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Eventos");
+      
+      // Ajustar ancho de columnas
+      const columns = [
+        { wch: 15 },  // tipo
+        { wch: 50 },  // evento
+        { wch: 20 },  // sala
+        { wch: 10 },  // inicio
+        { wch: 10 },  // fin
+        { wch: 15 }   // campus
+      ];
+      worksheet['!cols'] = columns;
+      
+      const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      
+      return new NextResponse(excelBuffer, {
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': 'attachment; filename=eventos.xlsx'
+        }
+      });
+    } else {
+      // Responder con el formato que espera el componente React
+      return NextResponse.json({ 
+        success: true,
+        eventos: allEvents,
+        totalEventos: allEvents.length,
+        totalPaginas: totalPages,
+        timestamp: new Date().toISOString()
+      });
+    }
   } catch (error) {
-    console.error("Error al descargar el Excel:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error('Error fetching data:', error);
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Error al obtener datos de la página',
+      message: error.message
+    }, { status: 500 });
   }
 }
